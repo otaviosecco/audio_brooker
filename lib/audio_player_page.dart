@@ -1,74 +1,50 @@
-// arquivo: audio_player_page_state.dart
+// arquivo: audio_player_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'dart:io';
 import 'audio_handler.dart';
 import 'package:rxdart/rxdart.dart';
-
+import 'package:provider/provider.dart';
 
 class AudioPlayerPage extends StatefulWidget {
   final String audioPath;
   final String? imagePath;
   final String title;
-  final AudioPlayerHandler audioHandler;
 
   const AudioPlayerPage({
     super.key,
     required this.audioPath,
     this.imagePath,
     required this.title,
-    required this.audioHandler,
-
-  });
-  @override
-  AudioPlayerPageState createState() => AudioPlayerPageState(
-    audioPath: audioPath,
-    title: title,
-    audioHandler: audioHandler,
-  );
-}
-
-
-
-class AudioPlayerPageState extends State<AudioPlayerPage> {
-  final String audioPath;
-  final String? imagePath;
-  final String title;
-  final AudioPlayerHandler audioHandler;
-
-  AudioPlayerPageState({
-    required this.audioPath,
-    this.imagePath,
-    required this.title,
-    required this.audioHandler,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(); // Placeholder implementation
-  }
+  _AudioPlayerPageState createState() => _AudioPlayerPageState();
 }
 
 class _AudioPlayerPageState extends State<AudioPlayerPage> {
-
+  late AudioPlayerHandler audioHandler;
   double _playbackSpeed = 1.0;
 
   @override
   void initState() {
     super.initState();
+    audioHandler = Provider.of<AudioPlayerHandler>(context, listen: false);
     _init();
   }
 
   Future<void> _init() async {
     try {
-      await widget.audioHandler.setAudioSource(
-        widget.audioPath,
-        widget.title,
-        widget.imagePath,
-      );
-      // Iniciar a reprodução automaticamente
-      await widget.audioHandler.play();
+      final currentMediaItem = audioHandler.mediaItem.value;
+      if (currentMediaItem == null || currentMediaItem.id != widget.audioPath) {
+        await audioHandler.setAudioSource(
+          widget.audioPath,
+          widget.title,
+          widget.imagePath,
+        );
+        await audioHandler.play();
+      }
     } catch (e) {
       print('Erro ao carregar o áudio: $e');
     }
@@ -128,8 +104,6 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               builder: (context, snapshot) {
                 final durationState = snapshot.data;
                 final position = durationState?.position ?? Duration.zero;
-                final bufferedPosition =
-                    durationState?.bufferedPosition ?? Duration.zero;
                 final totalDuration = durationState?.total ?? Duration.zero;
 
                 return Column(
@@ -141,7 +115,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                           .clamp(0.0, totalDuration.inMilliseconds.toDouble())
                           .toDouble(),
                       onChanged: (value) {
-                        widget.audioHandler.seek(
+                        audioHandler.seek(
                             Duration(milliseconds: value.toInt()));
                       },
                     ),
@@ -151,7 +125,9 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(_formatDuration(position)),
-                          Text('-${_formatDuration(totalDuration - position)}'),
+                          Text(
+                            '-${_formatDuration(totalDuration - position)}',
+                          ),
                         ],
                       ),
                     ),
@@ -169,29 +145,30 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                 IconButton(
                   icon: const Icon(Icons.skip_previous),
                   iconSize: 36.0,
-                  onPressed: widget.audioHandler.skipToPrevious,
+                  onPressed: audioHandler.skipToPrevious,
                 ),
                 // Botão 'Voltar 30 Segundos'
                 IconButton(
                   icon: const Icon(Icons.replay_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = widget.audioHandler
+                    final newPosition = audioHandler
                             .playbackState.value.position -
                         const Duration(seconds: 30);
-                    widget.audioHandler.seek(newPosition >= Duration.zero
-                        ? newPosition
-                        : Duration.zero);
+                    audioHandler.seek(
+                      newPosition >= Duration.zero
+                          ? newPosition
+                          : Duration.zero,
+                    );
                   },
                 ),
                 // Botão 'Play/Pause'
                 StreamBuilder<PlaybackState>(
-                  stream: widget.audioHandler.playbackState,
+                  stream: audioHandler.playbackState,
                   builder: (context, snapshot) {
                     final playbackState = snapshot.data;
-                    final processingState =
-                        playbackState?.processingState ??
-                            AudioProcessingState.idle;
+                    final processingState = playbackState?.processingState ??
+                        AudioProcessingState.idle;
                     final isPlaying = playbackState?.playing ?? false;
 
                     if (processingState == AudioProcessingState.loading ||
@@ -201,13 +178,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                       return IconButton(
                         icon: const Icon(Icons.pause_circle_filled),
                         iconSize: 64.0,
-                        onPressed: widget.audioHandler.pause,
+                        onPressed: audioHandler.pause,
                       );
                     } else {
                       return IconButton(
                         icon: const Icon(Icons.play_circle_filled),
                         iconSize: 64.0,
-                        onPressed: widget.audioHandler.play,
+                        onPressed: audioHandler.play,
                       );
                     }
                   },
@@ -217,22 +194,24 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   icon: const Icon(Icons.forward_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = widget.audioHandler
+                    final newPosition = audioHandler
                             .playbackState.value.position +
                         const Duration(seconds: 30);
                     final totalDuration =
-                        widget.audioHandler.mediaItem.value?.duration ??
+                        audioHandler.mediaItem.value?.duration ??
                             Duration.zero;
-                    widget.audioHandler.seek(newPosition <= totalDuration
-                        ? newPosition
-                        : totalDuration);
+                    audioHandler.seek(
+                      newPosition <= totalDuration
+                          ? newPosition
+                          : totalDuration,
+                    );
                   },
                 ),
                 // Botão 'Avançar Áudio'
                 IconButton(
                   icon: const Icon(Icons.skip_next),
                   iconSize: 36.0,
-                  onPressed: widget.audioHandler.skipToNext,
+                  onPressed: audioHandler.skipToNext,
                 ),
               ],
             ),
@@ -254,11 +233,11 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   Stream<DurationState> get _durationStateStream =>
       Rx.combineLatest2<Duration, MediaItem?, DurationState>(
         AudioService.position,
-        widget.audioHandler.mediaItem,
+        audioHandler.mediaItem,
         (position, mediaItem) => DurationState(
           position: position,
           bufferedPosition:
-              widget.audioHandler.playbackState.value.bufferedPosition,
+              audioHandler.playbackState.value.bufferedPosition,
           total: mediaItem?.duration ?? Duration.zero,
         ),
       );
@@ -315,7 +294,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     if (speed != null) {
       setState(() {
         _playbackSpeed = speed;
-        widget.audioHandler.setSpeed(speed);
+        audioHandler.setSpeed(speed);
       });
       Navigator.pop(context);
     }
@@ -327,9 +306,9 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
     if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     } else {
-      return '$minutes:${seconds.toString().padLeft(2, '0')}';
+      return '${minutes}:${seconds.toString().padLeft(2, '0')}';
     }
   }
 }

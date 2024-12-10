@@ -2,7 +2,8 @@ import 'package:audio_brooker/audio_handler.dart';
 import 'package:audio_brooker/audio_player_page.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+import 'package:provider/provider.dart';
+
 
 
 class AudioListPage extends StatefulWidget {
@@ -26,50 +27,52 @@ class _AudioListPageState extends State<AudioListPage> {
   ];
 
   @override
-  Widget build(BuildContext context) {
+ Widget build(BuildContext context) {
+    final audioHandler = Provider.of<AudioPlayerHandler>(context);
+
+    void _openAudioPlayer(Map<String, dynamic> audioItem) {
+      final currentMediaItem = audioHandler.mediaItem.value;
+      if (currentMediaItem != null && currentMediaItem.id == audioItem['audioPath']) {
+        // Se for o mesmo áudio, apenas navegue para a página do player
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AudioPlayerPage(
+              audioPath: audioItem['audioPath'],
+              title: audioItem['title'],
+              imagePath: audioItem['imagePath'],
+            ),
+          ),
+        );
+      } else {
+        // Se for um áudio diferente, configure o novo áudio
+        audioHandler.stop();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AudioPlayerPage(
+              audioPath: audioItem['audioPath'],
+              title: audioItem['title'],
+              imagePath: audioItem['imagePath'],
+            ),
+          ),
+        );
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Seleção de Áudios'),
+        title: const Text('Lista de Áudios'),
       ),
       body: ListView.builder(
         itemCount: audioList.length,
         itemBuilder: (context, index) {
-          final audio = audioList[index];
+          final audioItem = audioList[index];
           return ListTile(
-            leading: audio['imagePath'] != null
-                ? (audio['imagePath']!.startsWith('assets/')
-                    ? Image.asset(
-                        audio['imagePath']!,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                      )
-                    : Image.file(
-                        File(audio['imagePath']!),
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                      ))
-                : const Icon(Icons.music_note),
-            title: Text(audio['title'] ?? 'Áudio sem título'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AudioPlayerPage(
-                    audioPath: audio['audioPath']!,
-                    imagePath: audio['imagePath'],
-                    title: audio['title']!, audioHandler: widget.audioHandler,
-                  ),
-                ),
-              );
-            },
+            title: Text(audioItem['title'] ?? 'Unknown Title'),
+            onTap: () => _openAudioPlayer(audioItem),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddAudioDialog,
-        child: const Icon(Icons.add),
       ),
     );
   }
