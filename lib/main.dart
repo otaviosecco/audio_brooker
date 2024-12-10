@@ -23,7 +23,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AudioPlayerHandler audioHandler;
 
-  const MyApp({Key? key, required this.audioHandler}) : super(key: key);
+  const MyApp({super.key, required this.audioHandler});
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +42,14 @@ class MyApp extends StatelessWidget {
 
 
 class MainPage extends StatelessWidget {
-  const MainPage({Key? key}) : super(key: key);
+  const MainPage({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
           AudioListPage(audioHandler: Provider.of<AudioPlayerHandler>(context)),
-          Align(
+          const Align(
             alignment: Alignment.bottomCenter,
             child: MinimizedPlayer(),
           ),

@@ -2,8 +2,12 @@ import 'package:audio_brooker/audio_handler.dart';
 import 'package:audio_brooker/audio_player_page.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import 'package:provider/provider.dart';
-
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'audio_model.dart';
+import 'audio_search_page.dart';
 
 
 class AudioListPage extends StatefulWidget {
@@ -17,30 +21,42 @@ class AudioListPage extends StatefulWidget {
 
 
 class _AudioListPageState extends State<AudioListPage> {
-  List<Map<String, String>> audioList = [
-    {
-      'title': 'SABOR DE MORANGUIN',
-      'audioPath': 'assets/audios/RenanAud.mp3',
-      'imagePath': 'assets/images/RenanImg.png',
-    },
-    // Adicione mais áudios dos assets se necessário
-  ];
+  List<AudioModel> audioList = [];
 
   @override
- Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    fetchAudioList();
+  }
+
+  Future<void> fetchAudioList() async {
+    final response = await http.get(Uri.parse('http://<your-ip>:3000/audioList'));
+
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      setState(() {
+        audioList = jsonResponse.map((audio) => AudioModel.fromJson(audio)).toList();
+      });
+    } else {
+      throw Exception('Failed to load audio list');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final audioHandler = Provider.of<AudioPlayerHandler>(context);
 
     void _openAudioPlayer(Map<String, dynamic> audioItem) {
       final currentMediaItem = audioHandler.mediaItem.value;
-      if (currentMediaItem != null && currentMediaItem.id == audioItem['audioPath']) {
+      if (currentMediaItem != null && currentMediaItem.id == audioItem['audioUrl']) {
         // Se for o mesmo áudio, apenas navegue para a página do player
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => AudioPlayerPage(
-              audioPath: audioItem['audioPath'],
+              audioUrl: audioItem['audioUrl'],
               title: audioItem['title'],
-              imagePath: audioItem['imagePath'],
+              imageUrl: audioItem['imageUrl'],
             ),
           ),
         );
@@ -51,9 +67,9 @@ class _AudioListPageState extends State<AudioListPage> {
           context,
           MaterialPageRoute(
             builder: (context) => AudioPlayerPage(
-              audioPath: audioItem['audioPath'],
+              audioUrl: audioItem['audioUrl'],
               title: audioItem['title'],
-              imagePath: audioItem['imagePath'],
+              imageUrl: audioItem['imageUrl'],
             ),
           ),
         );
@@ -69,10 +85,38 @@ class _AudioListPageState extends State<AudioListPage> {
         itemBuilder: (context, index) {
           final audioItem = audioList[index];
           return ListTile(
-            title: Text(audioItem['title'] ?? 'Unknown Title'),
-            onTap: () => _openAudioPlayer(audioItem),
+            leading: Image.network(
+              audioItem.imageUrl,
+              width: 50,
+              height: 50,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(
+                  Icons.music_note,
+                  size: 50,
+                  color: Colors.white,
+                );
+              },
+            ),
+            title: Text(audioItem.title),
+            onTap: () => _openAudioPlayer({
+              'audioUrl': audioItem.audioUrl,
+              'title': audioItem.title,
+              'imageUrl': audioItem.imageUrl,
+            }),
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AudioSearchPage(),
+            ),
+          );
+        },
+        child: const Icon(Icons.search),
       ),
     );
   }
@@ -102,15 +146,13 @@ class _AudioListPageState extends State<AudioListPage> {
   }
 
   Future<void> _addAudioFromAssets() async {
-    // Fechar o diálogo
     Navigator.of(context).pop();
 
-    // Lista de áudios e imagens disponíveis nos assets
     List<Map<String, String>> assetsList = [
       {
-        'title': 'Áudio de Asset',
-        'audioPath': 'assets/audios/RenanAud.mp3',
-        'imagePath': 'assets/images/RenanImg.jpg',
+        'title': 'Renanzinho Added',
+        'audioUrl': 'assets/audios/RenanAud.mp3',
+        'imageUrl': 'asset:///assets/images/RenanImg.png',
       },
       // Adicione mais áudios dos assets se necessário
     ];
@@ -124,16 +166,11 @@ class _AudioListPageState extends State<AudioListPage> {
             mainAxisSize: MainAxisSize.min,
             children: assetsList.map((asset) {
               return ListTile(
-                leading: Image.asset(
-                  asset['imagePath']!,
-                  width: 50,
-                  height: 50,
-                  fit: BoxFit.cover,
-                ),
+                leading: _buildImage(Uri.parse(asset['imageUrl']!)),
                 title: Text(asset['title']!),
                 onTap: () {
                   setState(() {
-                    audioList.add(asset);
+                    audioList.add(AudioModel.fromJson(asset));
                   });
                   Navigator.of(context).pop();
                 },
@@ -146,33 +183,63 @@ class _AudioListPageState extends State<AudioListPage> {
   }
 
   Future<void> _addAudioFromFile() async {
-    // Fechar o diálogo
     Navigator.of(context).pop();
 
-    // Selecionar arquivo de áudio
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.audio,
     );
 
     if (result != null) {
-      String audioPath = result.files.single.path!;
-      String? title = result.files.single.name;
-
-      // Selecionar imagem (opcional)
+      String audioUrl = result.files.single.path!;
+      String title = result.files.single.name;
+      int id = int.parse(result.files.single.identifier ?? '0');
       FilePickerResult? imageResult = await FilePicker.platform.pickFiles(
         type: FileType.image,
       );
 
-      String? imagePath =
-          imageResult?.files.single.path;
+      String? imageUrl = imageResult?.files.single.path;
+
+      String? imageUri;
+      if (imageUrl != null) {
+        if (imageUrl.startsWith('assets/')) {
+          imageUri = 'asset:///$imageUrl';
+        } else {
+          imageUri = Uri.file(imageUrl).toString();
+        }
+      }
 
       setState(() {
-        audioList.add({
-          'title': title,
-          'audioPath': audioPath,
-          if (imagePath != null) 'imagePath': imagePath,
-        });
+        audioList.add(AudioModel(
+          id: id, // or any unique identifier
+          title: title,
+          audioUrl: audioUrl,
+          imageUrl: imageUri ?? '',
+        ));
       });
+    }
+  }
+
+  Widget _buildImage(Uri artUri) {
+    if (artUri.scheme == 'asset') {
+      return Image.asset(
+        artUri.path.replaceFirst('/', ''),
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+      );
+    } else if (artUri.scheme == 'file') {
+      return Image.file(
+        File(artUri.toFilePath()),
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+      );
+    } else {
+      return const Icon(
+        Icons.music_note,
+        size: 50,
+        color: Colors.white,
+      );
     }
   }
 }

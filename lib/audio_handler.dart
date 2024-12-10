@@ -66,20 +66,35 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   }
 
   // Configurar mídia dinâmica
+  // Dentro do AudioPlayerHandler:
   Future<void> setAudioSource(String audioPath, String title, String? imageUrl) async {
-    // Definir metadados da mídia
-    mediaItem.add(MediaItem(
-      id: audioPath,
-      album: 'Seu Álbum',
-      title: title,
-      artUri: imageUrl != null ? Uri.parse(imageUrl) : null,
-    ));
-
-    // Carregar a fonte de áudio
     if (audioPath.startsWith('assets/')) {
       await _player.setAsset(audioPath);
     } else {
       await _player.setFilePath(audioPath);
     }
+
+    // Obtenha a duração após configurar a fonte
+    final duration = _player.duration ?? Duration.zero;
+
+    // Ajuste o artUri com um esquema personalizado
+    Uri? artUri;
+    if (imageUrl != null) {
+      if (imageUrl.startsWith('assets/')) {
+        // Prefixe com 'asset:///'
+        artUri = Uri.parse('asset:///$imageUrl');
+      } else {
+        // Utilize Uri.file para arquivos locais
+        artUri = Uri.file(imageUrl);
+      }
+    }
+
+    mediaItem.add(MediaItem(
+      id: audioPath,
+      album: 'Seu Álbum',
+      title: title,
+      artUri: artUri,
+      duration: duration,
+    ));
   }
 }

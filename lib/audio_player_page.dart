@@ -8,14 +8,14 @@ import 'package:rxdart/rxdart.dart';
 import 'package:provider/provider.dart';
 
 class AudioPlayerPage extends StatefulWidget {
-  final String audioPath;
-  final String? imagePath;
+  final String audioUrl;
+  final String imageUrl;
   final String title;
 
   const AudioPlayerPage({
     super.key,
-    required this.audioPath,
-    this.imagePath,
+    required this.audioUrl,
+    required this.imageUrl,
     required this.title,
   });
 
@@ -37,11 +37,11 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   Future<void> _init() async {
     try {
       final currentMediaItem = audioHandler.mediaItem.value;
-      if (currentMediaItem == null || currentMediaItem.id != widget.audioPath) {
+      if (currentMediaItem == null || currentMediaItem.id != widget.audioUrl) {
         await audioHandler.setAudioSource(
-          widget.audioPath,
+          widget.audioUrl,
           widget.title,
-          widget.imagePath,
+          widget.imageUrl,
         );
         await audioHandler.play();
       }
@@ -77,25 +77,21 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         child: Column(
           children: [
             // Thumbnail
-            if (widget.imagePath != null)
-              Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16.0),
-                  image: DecorationImage(
-                    image: widget.imagePath!.startsWith('assets/')
-                        ? AssetImage(widget.imagePath!) as ImageProvider
-                        : FileImage(File(widget.imagePath!)),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              )
-            else
-              const Icon(
-                Icons.music_note,
-                size: 200,
-              ),
+            StreamBuilder<MediaItem?>(
+              stream: audioHandler.mediaItem,
+              builder: (context, snapshot) {
+                final mediaItem = snapshot.data;
+                if (mediaItem?.artUri != null) {
+                  return _buildImage(mediaItem!.artUri!);
+                } else {
+                  return const Icon(
+                    Icons.music_note,
+                    size: 50,
+                    color: Colors.white,
+                  );
+                }
+              },
+            ),
             const SizedBox(height: 24.0),
 
             // Barra de progresso
@@ -110,13 +106,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   children: [
                     Slider(
                       min: 0.0,
-                      max: totalDuration.inMilliseconds.toDouble(),
-                      value: position.inMilliseconds
-                          .clamp(0.0, totalDuration.inMilliseconds.toDouble())
-                          .toDouble(),
+                      max: durationState!.total.inMilliseconds.toDouble(),
+                      value: durationState.position.inMilliseconds.toDouble(),
                       onChanged: (value) {
-                        audioHandler.seek(
-                            Duration(milliseconds: value.toInt()));
+                        audioHandler.seek(Duration(milliseconds: value.toInt()));
                       },
                     ),
                     Padding(
@@ -125,8 +118,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(_formatDuration(position)),
-                          Text(
-                            '-${_formatDuration(totalDuration - position)}',
+                          Text('-${_formatDuration(totalDuration)}',
                           ),
                         ],
                       ),
@@ -230,15 +222,17 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   }
 
   // Stream de estado de duração
-  Stream<DurationState> get _durationStateStream =>
-      Rx.combineLatest2<Duration, MediaItem?, DurationState>(
-        AudioService.position,
-        audioHandler.mediaItem,
-        (position, mediaItem) => DurationState(
-          position: position,
-          bufferedPosition:
-              audioHandler.playbackState.value.bufferedPosition,
-          total: mediaItem?.duration ?? Duration.zero,
+  Stream<DurationState> get _durationStateStream => Rx.combineLatest3<
+    Duration, Duration, MediaItem?, DurationState>(
+      AudioService.position,
+      audioHandler.playbackState
+          .map((state) => state.bufferedPosition)
+          .distinct(),
+      audioHandler.mediaItem,
+      (position, bufferedPosition, mediaItem) => DurationState(
+        position: position,
+        bufferedPosition: bufferedPosition,
+        total: mediaItem?.duration ?? Duration.zero,
         ),
       );
 
@@ -289,6 +283,32 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     );
   }
 
+  Widget _buildImage(Uri artUri) {
+    if (artUri.scheme == 'asset') {
+      // Se o artUri usa o esquema 'asset', carregue usando Image.asset
+      return Image.asset(
+        artUri.path.replaceFirst('/', ''), // Remova a primeira '/' do path
+        width: 350,
+        height: 350,
+        fit: BoxFit.cover,
+      );
+    } else if (artUri.scheme == 'file') {
+      // Se for um arquivo local, use Image.file
+      return Image.file(
+        File(artUri.toFilePath()),
+        width: 350,
+        height: 350,
+        fit: BoxFit.cover,
+      );
+    } else {
+      // Caso contrário, exiba um placeholder ou ícone padrão
+      return const Icon(
+        Icons.music_note,
+        size: 350,
+        color: Colors.white,
+      );
+    }
+  }
   // Alterar velocidade de reprodução
   void _changePlaybackSpeed(double? speed) {
     if (speed != null) {
@@ -306,9 +326,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
     if (hours > 0) {
-      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      return '${hours.toString().padLeft(2, '0')}:'
+            '${minutes.toString().padLeft(2, '0')}:'
+            '${seconds.toString().padLeft(2, '0')}';
     } else {
-      return '${minutes}:${seconds.toString().padLeft(2, '0')}';
+      return '${minutes.toString().padLeft(2, '0')}:'
+            '${seconds.toString().padLeft(2, '0')}';
     }
   }
 }

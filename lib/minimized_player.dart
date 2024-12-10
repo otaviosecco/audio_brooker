@@ -1,11 +1,14 @@
-import 'dart:io';
+// arquivo: minimized_player.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'audio_handler.dart';
 import 'audio_player_page.dart';
+import 'dart:io';
 
 class MinimizedPlayer extends StatelessWidget {
+  const MinimizedPlayer({super.key});
+
   @override
   Widget build(BuildContext context) {
     final audioHandler = Provider.of<AudioPlayerHandler>(context);
@@ -15,10 +18,10 @@ class MinimizedPlayer extends StatelessWidget {
       builder: (context, snapshot) {
         final isPlaying = snapshot.data ?? false;
         if (!isPlaying) {
-          return SizedBox.shrink(); // Não mostra nada se não estiver tocando
+          return const SizedBox.shrink(); // Não mostra nada se não estiver tocando
         } else {
           final mediaItem = audioHandler.mediaItem.value;
-          if (mediaItem == null) return SizedBox.shrink();
+          if (mediaItem == null) return const SizedBox.shrink();
 
           return GestureDetector(
             onTap: () {
@@ -27,9 +30,10 @@ class MinimizedPlayer extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => AudioPlayerPage(
-                    audioPath: mediaItem.id,
+                    key: ValueKey<int>(int.parse(mediaItem.id)),
+                    audioUrl: mediaItem.id,
                     title: mediaItem.title,
-                    imagePath: mediaItem.artUri?.toString(),
+                    imageUrl: mediaItem.artUri?.toString() ?? '',
                   ),
                 ),
               );
@@ -40,12 +44,7 @@ class MinimizedPlayer extends StatelessWidget {
               child: Row(
                 children: [
                   if (mediaItem.artUri != null)
-                    Image.file(
-                      File(mediaItem.artUri!.path),
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                    )
+                    _buildImage(mediaItem.artUri!)
                   else
                     const Icon(
                       Icons.music_note,
@@ -80,5 +79,32 @@ class MinimizedPlayer extends StatelessWidget {
         }
       },
     );
+  }
+
+  Widget _buildImage(Uri artUri) {
+    if (artUri.scheme == 'asset') {
+      // Se o artUri usa o esquema 'asset', carregue usando Image.asset
+      return Image.asset(
+        artUri.path.replaceFirst('/', ''), // Remova a primeira '/' do path
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+      );
+    } else if (artUri.scheme == 'file') {
+      // Se for um arquivo local, use Image.file
+      return Image.file(
+        File(artUri.toFilePath()),
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+      );
+    } else {
+      // Caso contrário, exiba um placeholder ou ícone padrão
+      return const Icon(
+        Icons.music_note,
+        size: 50,
+        color: Colors.white,
+      );
+    }
   }
 }
