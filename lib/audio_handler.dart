@@ -1,47 +1,87 @@
-// arquivo: audio_handler.dart
-
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'dart:async';
+import 'package:rxdart/rxdart.dart';
+
+class DurationState {
+  final Duration position;
+  final Duration bufferedPosition;
+  final Duration total;
+
+  DurationState({required this.position, required this.bufferedPosition, required this.total});
+}
 
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
 
+  // BehaviorSubject para controle de duração
+  final _durationState = BehaviorSubject<DurationState>();
+
   AudioPlayerHandler() {
-    // Configure o player aqui
-    _notifyAudioHandlerAboutPlaybackEvents();
-  }
-
-  // Notificar o sistema sobre eventos de reprodução
-  void _notifyAudioHandlerAboutPlaybackEvents() {
-    _player.playbackEventStream.listen((event) {
-      playbackState.add(playbackState.value.copyWith(
-        controls: [
-          MediaControl.skipToPrevious,
-          if (_player.playing) MediaControl.pause else MediaControl.play,
-          MediaControl.stop,
-          MediaControl.skipToNext,
-        ],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        androidCompactActionIndices: const [0, 1, 3],
-        processingState: const {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[_player.processingState]!,
-        playing: _player.playing,
-        updatePosition: _player.position,
-        bufferedPosition: _player.bufferedPosition,
-        speed: _player.speed,
-      ));
+    // Listen to playback events from the player
+    _player.playbackEventStream.listen(_broadcastPlaybackEvent, onError: (error) {
+      // Handle errors
+      print('Error in playbackEventStream: $error');
     });
+
+    // Listen to duration changes if needed
   }
 
+  void _broadcastPlaybackEvent(PlaybackEvent event) {
+    // Atualiza o estado de reprodução
+    playbackState.add(playbackState.value.copyWith(
+      controls: [
+        MediaControl.skipToPrevious,
+        if (_player.playing) MediaControl.pause else MediaControl.play,
+        MediaControl.stop,
+        MediaControl.skipToNext,
+      ],
+      systemActions: {
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+      },
+      androidCompactActionIndices: const [0, 1, 3],
+      processingState: {
+        ProcessingState.idle: AudioProcessingState.idle,
+        ProcessingState.loading: AudioProcessingState.loading,
+        ProcessingState.buffering: AudioProcessingState.buffering,
+        ProcessingState.ready: AudioProcessingState.ready,
+        ProcessingState.completed: AudioProcessingState.completed,
+      }[event.processingState]!,
+      playing: _player.playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+      queueIndex: event.currentIndex,
+    ));
+
+    // Atualiza DurationState
+    _durationState.add(DurationState(
+      position: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      total: _player.duration ?? Duration.zero,
+    ));
+  }
+
+  Future<void> setAudioSource(String url, String title, String imageUrl) async {
+    final mediaItem = MediaItem(
+      id: url,
+      title: title,
+      artUri: Uri.parse(imageUrl),
+    );
+
+    // Adiciona o MediaItem
+    this.mediaItem.add(mediaItem);
+
+    // Configura a fonte de áudio
+    try {
+      await _player.setUrl(url);
+      this.mediaItem.add(mediaItem);
+    } catch (e) {
+      print('Erro ao configurar a URL: $e');
+    }
+  }
   // Outros métodos para controlar a reprodução
   @override
   Future<void> play() => _player.play();
@@ -67,7 +107,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   // Configurar mídia dinâmica
   // Dentro do AudioPlayerHandler:
-  Future<void> setAudioSource(String audioPath, String title, String? imageUrl) async {
+  Future<void> setDynamicAudioSource(String audioPath, String title, String? imageUrl) async {
     if (audioPath.startsWith('assets/')) {
       await _player.setAsset(audioPath);
     } else {

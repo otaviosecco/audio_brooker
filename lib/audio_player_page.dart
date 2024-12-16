@@ -1,11 +1,9 @@
-// arquivo: audio_player_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'dart:io';
 import 'audio_handler.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:provider/provider.dart';
+import 'package:rxdart/rxdart.dart';
 
 class AudioPlayerPage extends StatefulWidget {
   final String audioUrl;
@@ -39,7 +37,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       final currentMediaItem = audioHandler.mediaItem.value;
       if (currentMediaItem == null || currentMediaItem.id != widget.audioUrl) {
         await audioHandler.setAudioSource(
-          widget.audioUrl,
+          widget.audioUrl,   // Passa a URL diretamente
           widget.title,
           widget.imageUrl,
         );
@@ -96,7 +94,16 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
             // Barra de progresso
             StreamBuilder<DurationState>(
-              stream: _durationStateStream,
+              stream: Rx.combineLatest3<Duration, Duration, Duration, DurationState>(
+                audioHandler.playbackState.map((state) => state.position),
+                audioHandler.playbackState.map((state) => state.bufferedPosition),
+                audioHandler.mediaItem.map((item) => item?.duration ?? Duration.zero),
+                (position, bufferedPosition, total) => DurationState(
+                  position: position,
+                  bufferedPosition: bufferedPosition,
+                  total: total,
+                ),
+              ),
               builder: (context, snapshot) {
                 final durationState = snapshot.data;
                 final position = durationState?.position ?? Duration.zero;
@@ -106,8 +113,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   children: [
                     Slider(
                       min: 0.0,
-                      max: durationState!.total.inMilliseconds.toDouble(),
-                      value: durationState.position.inMilliseconds.toDouble(),
+                      max: totalDuration.inMilliseconds.toDouble(),
+                      value: position.inMilliseconds.toDouble().clamp(0.0, totalDuration.inMilliseconds.toDouble()),
                       onChanged: (value) {
                         audioHandler.seek(Duration(milliseconds: value.toInt()));
                       },
@@ -118,7 +125,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(_formatDuration(position)),
-                          Text('-${_formatDuration(totalDuration)}',
+                          Text('-${_formatDuration(totalDuration - position)}',
                           ),
                         ],
                       ),
@@ -144,13 +151,9 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   icon: const Icon(Icons.replay_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = audioHandler
-                            .playbackState.value.position -
-                        const Duration(seconds: 30);
+                    final newPosition = audioHandler.playbackState.value.position - const Duration(seconds: 30);
                     audioHandler.seek(
-                      newPosition >= Duration.zero
-                          ? newPosition
-                          : Duration.zero,
+                      newPosition >= Duration.zero ? newPosition : Duration.zero,
                     );
                   },
                 ),
@@ -159,8 +162,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   stream: audioHandler.playbackState,
                   builder: (context, snapshot) {
                     final playbackState = snapshot.data;
-                    final processingState = playbackState?.processingState ??
-                        AudioProcessingState.idle;
+                    final processingState = playbackState?.processingState ?? AudioProcessingState.idle;
                     final isPlaying = playbackState?.playing ?? false;
 
                     if (processingState == AudioProcessingState.loading ||
@@ -186,16 +188,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   icon: const Icon(Icons.forward_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = audioHandler
-                            .playbackState.value.position +
-                        const Duration(seconds: 30);
-                    final totalDuration =
-                        audioHandler.mediaItem.value?.duration ??
-                            Duration.zero;
+                    final newPosition = audioHandler.playbackState.value.position + const Duration(seconds: 30);
+                    final totalDuration = audioHandler.mediaItem.value?.duration ?? Duration.zero;
                     audioHandler.seek(
-                      newPosition <= totalDuration
-                          ? newPosition
-                          : totalDuration,
+                      newPosition <= totalDuration ? newPosition : totalDuration,
                     );
                   },
                 ),
@@ -220,21 +216,6 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       ),
     );
   }
-
-  // Stream de estado de duração
-  Stream<DurationState> get _durationStateStream => Rx.combineLatest3<
-    Duration, Duration, MediaItem?, DurationState>(
-      AudioService.position,
-      audioHandler.playbackState
-          .map((state) => state.bufferedPosition)
-          .distinct(),
-      audioHandler.mediaItem,
-      (position, bufferedPosition, mediaItem) => DurationState(
-        position: position,
-        bufferedPosition: bufferedPosition,
-        total: mediaItem?.duration ?? Duration.zero,
-        ),
-      );
 
   // Mostrar diálogo para selecionar a velocidade de reprodução
   void _showPlaybackSpeedDialog() {
@@ -309,6 +290,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       );
     }
   }
+
   // Alterar velocidade de reprodução
   void _changePlaybackSpeed(double? speed) {
     if (speed != null) {
@@ -327,11 +309,11 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     final seconds = duration.inSeconds.remainder(60);
     if (hours > 0) {
       return '${hours.toString().padLeft(2, '0')}:'
-            '${minutes.toString().padLeft(2, '0')}:'
-            '${seconds.toString().padLeft(2, '0')}';
+          '${minutes.toString().padLeft(2, '0')}:'
+          '${seconds.toString().padLeft(2, '0')}';
     } else {
       return '${minutes.toString().padLeft(2, '0')}:'
-            '${seconds.toString().padLeft(2, '0')}';
+          '${seconds.toString().padLeft(2, '0')}';
     }
   }
 }

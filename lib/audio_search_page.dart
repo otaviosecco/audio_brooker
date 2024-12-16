@@ -14,7 +14,7 @@ class AudioSearchPage extends StatefulWidget {
 
 class _AudioSearchPageState extends State<AudioSearchPage> {
   List<AudioModel> searchResults = [];
-  TextEditingController _controller = TextEditingController();
+  final TextEditingController _controller = TextEditingController();
 
   Future<void> _searchAudio(String query) async {
     final response = await http.get(Uri.parse('http://<your-ip>:3000/search?q=$query'));
@@ -33,7 +33,7 @@ class _AudioSearchPageState extends State<AudioSearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('Search Audios'),
+          title: const Text('Search Audios'),
         ),
         body: Column(
           children: [
@@ -42,7 +42,7 @@ class _AudioSearchPageState extends State<AudioSearchPage> {
               decoration: InputDecoration(
                 hintText: 'Enter audio title',
                 suffixIcon: IconButton(
-                  icon: Icon(Icons.search),
+                  icon: const Icon(Icons.search),
                   onPressed: () => _searchAudio(_controller.text),
                 ),
               ),

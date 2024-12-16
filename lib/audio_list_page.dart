@@ -1,14 +1,12 @@
-import 'package:audio_brooker/audio_handler.dart';
-import 'package:audio_brooker/audio_player_page.dart';
-import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'package:provider/provider.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'audio_model.dart';
-import 'audio_search_page.dart';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'audio_handler.dart';
+import 'audio_player_page.dart';
+import 'audio_model.dart';
+import 'http/api_service.dart';
 
 class AudioListPage extends StatefulWidget {
   final AudioPlayerHandler audioHandler;
@@ -18,7 +16,6 @@ class AudioListPage extends StatefulWidget {
   @override
   _AudioListPageState createState() => _AudioListPageState();
 }
-
 
 class _AudioListPageState extends State<AudioListPage> {
   List<AudioModel> audioList = [];
@@ -30,14 +27,12 @@ class _AudioListPageState extends State<AudioListPage> {
   }
 
   Future<void> fetchAudioList() async {
-    final response = await http.get(Uri.parse('http://<your-ip>:3000/audioList'));
-
-    if (response.statusCode == 200) {
-      List jsonResponse = json.decode(response.body);
+    try {
+      List<dynamic> jsonResponse = await ApiService.fetchAudioList();
       setState(() {
         audioList = jsonResponse.map((audio) => AudioModel.fromJson(audio)).toList();
       });
-    } else {
+    } catch (e) {
       throw Exception('Failed to load audio list');
     }
   }
@@ -49,7 +44,6 @@ class _AudioListPageState extends State<AudioListPage> {
     void _openAudioPlayer(Map<String, dynamic> audioItem) {
       final currentMediaItem = audioHandler.mediaItem.value;
       if (currentMediaItem != null && currentMediaItem.id == audioItem['audioUrl']) {
-        // Se for o mesmo áudio, apenas navegue para a página do player
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -61,7 +55,6 @@ class _AudioListPageState extends State<AudioListPage> {
           ),
         );
       } else {
-        // Se for um áudio diferente, configure o novo áudio
         audioHandler.stop();
         Navigator.push(
           context,
@@ -108,15 +101,8 @@ class _AudioListPageState extends State<AudioListPage> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AudioSearchPage(),
-            ),
-          );
-        },
-        child: const Icon(Icons.search),
+        onPressed: _showAddAudioDialog,
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -150,9 +136,9 @@ class _AudioListPageState extends State<AudioListPage> {
 
     List<Map<String, String>> assetsList = [
       {
-        'title': 'Renanzinho Added',
-        'audioUrl': 'assets/audios/RenanAud.mp3',
-        'imageUrl': 'asset:///assets/images/RenanImg.png',
+        'title': 'Áudio de Asset',
+        'audioPath': 'assets/audios/RenanAud.mp3',
+        'imagePath': 'asset:///assets/images/RenanImg.png',
       },
       // Adicione mais áudios dos assets se necessário
     ];
@@ -166,7 +152,7 @@ class _AudioListPageState extends State<AudioListPage> {
             mainAxisSize: MainAxisSize.min,
             children: assetsList.map((asset) {
               return ListTile(
-                leading: _buildImage(Uri.parse(asset['imageUrl']!)),
+                leading: _buildImage(Uri.parse(asset['imagePath']!)),
                 title: Text(asset['title']!),
                 onTap: () {
                   setState(() {
@@ -190,29 +176,29 @@ class _AudioListPageState extends State<AudioListPage> {
     );
 
     if (result != null) {
-      String audioUrl = result.files.single.path!;
-      String title = result.files.single.name;
-      int id = int.parse(result.files.single.identifier ?? '0');
+      String audioPath = result.files.single.path!;
+      String? title = result.files.single.name;
+
       FilePickerResult? imageResult = await FilePicker.platform.pickFiles(
         type: FileType.image,
       );
 
-      String? imageUrl = imageResult?.files.single.path;
+      String? imagePath = imageResult?.files.single.path;
 
       String? imageUri;
-      if (imageUrl != null) {
-        if (imageUrl.startsWith('assets/')) {
-          imageUri = 'asset:///$imageUrl';
+      if (imagePath != null) {
+        if (imagePath.startsWith('assets/')) {
+          imageUri = 'asset:///$imagePath';
         } else {
-          imageUri = Uri.file(imageUrl).toString();
+          imageUri = Uri.file(imagePath).toString();
         }
       }
 
       setState(() {
         audioList.add(AudioModel(
-          id: id, // or any unique identifier
-          title: title,
-          audioUrl: audioUrl,
+          id: audioList.length + 1,
+          title: title ?? 'Sem Título',
+          audioUrl: audioPath,
           imageUrl: imageUri ?? '',
         ));
       });
