@@ -50,6 +50,10 @@ dependencies:
   flutter_cache_manager: ^3.4.1
 
   http: ^1.2.2
+
+  http_interceptor: ^2.0.0
+  
+  intl:
   
 
 dev_dependencies:
