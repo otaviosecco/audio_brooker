@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image/image.dart' as img; // Add this import
 import 'audio_handler.dart';
 import 'audio_player_page.dart';
 import 'audio_model.dart';
@@ -44,7 +46,7 @@ class _AudioListPageState extends State<AudioListPage> {
   Widget build(BuildContext context) {
     final audioHandler = Provider.of<AudioPlayerHandler>(context);
 
-    void _openAudioPlayer(AudioModel audioItem) {
+    void _openAudioPlayer(AudioModel audioItem, Uint8List? resizedImage) {
       final currentMediaItem = audioHandler.mediaItem.value;
       if (currentMediaItem != null && currentMediaItem.id == audioItem.audioUrl) {
         Navigator.push(
@@ -53,7 +55,7 @@ class _AudioListPageState extends State<AudioListPage> {
             builder: (context) => AudioPlayerPage(
               audioUrl: audioItem.audioUrl,
               title: audioItem.title,
-              imageUrl: audioItem.coverArt,
+              imageBytes: resizedImage, // Pass resized image bytes
             ),
           ),
         );
@@ -65,7 +67,7 @@ class _AudioListPageState extends State<AudioListPage> {
             builder: (context) => AudioPlayerPage(
               audioUrl: audioItem.audioUrl,
               title: audioItem.title,
-              imageUrl: audioItem.coverArt,
+              imageBytes: resizedImage, // Pass resized image bytes
             ),
           ),
         );
@@ -81,39 +83,45 @@ class _AudioListPageState extends State<AudioListPage> {
         itemBuilder: (context, index) {
           final audioItem = audioList[index];
           return ListTile(
-            leading: audioItem.coverArt.isNotEmpty
-                ? Image.network(
-                    audioItem.coverArt,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.music_note,
-                        size: 50,
-                        color: Colors.white,
-                      );
-                    },
-                  )
-                : const Icon(
-                    Icons.music_note,
-                    size: 50,
-                    color: Colors.white,
-                  ),
+            leading: buildCoverArt(audioItem.coverArt, (resizedImage) {
+              _openAudioPlayer(audioItem, resizedImage);
+            }),
             title: Text(audioItem.title),
-            onTap: () => _openAudioPlayer(audioItem),
+            onTap: () {}, // Handled in buildCoverArt callback
           );
         },
       ),
     );
   }
 
-  Widget buildCoverArt(String coverArtBase64) {
-    if (coverArtBase64.isEmpty) {
-      return const Icon(Icons.music_note); // Ícone padrão caso não haja capa
-    } else {
-      final bytes = base64Decode(coverArtBase64.split(',').last);
-      return Image.memory(bytes, fit: BoxFit.cover);
+  Widget buildCoverArt(String? coverArtBase64, Function(Uint8List?) onImageReady) {
+    if (coverArtBase64 == null || coverArtBase64.isEmpty) {
+      return Icon(Icons.music_note, size: 40);
+    }
+    try {
+      String base64String = coverArtBase64.contains(',')
+          ? coverArtBase64.split(',').last
+          : coverArtBase64;
+      final bytes = base64Decode(base64String);
+
+      // Decode and resize the image
+      img.Image? originalImage = img.decodeImage(bytes);
+      if (originalImage == null) {
+        print('Error decoding image');
+        onImageReady(null);
+        return Icon(Icons.music_note, size: 40);
+      }
+      img.Image resizedImage = img.copyResize(originalImage, width: 350, height: 350);
+      final resizedBytes = Uint8List.fromList(img.encodeJpg(resizedImage));
+
+      // Pass the resized image bytes to AudioPlayerPage
+      onImageReady(resizedBytes);
+
+      return Image.memory(resizedBytes, width: 40, height: 40, fit: BoxFit.cover);
+    } catch (e) {
+      print('Error decoding cover art: $e');
+      onImageReady(null);
+      return Icon(Icons.music_note, size: 40);
     }
   }
 }

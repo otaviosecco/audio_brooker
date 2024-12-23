@@ -1,85 +1,87 @@
-// arquivo: minimized_player.dart
-
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'audio_handler.dart';
-import 'audio_player_page.dart';
 import 'dart:io';
 
-class MinimizedPlayer extends StatelessWidget {
-  const MinimizedPlayer({super.key});
+import 'package:audio_service/audio_service.dart';
+import 'package:flutter/material.dart';
+import 'audio_player_page.dart';
+
+class MinimizedPlayer extends StatefulWidget {
+  final MediaItem mediaItem;
+
+  const MinimizedPlayer({Key? key, required this.mediaItem}) : super(key: key);
+
+  @override
+  _MinimizedPlayerState createState() => _MinimizedPlayerState();
+}
+
+class _MinimizedPlayerState extends State<MinimizedPlayer> {
+  bool _isNavigating = false; // Flag to prevent multiple navigations
+
+  void _navigateToPlayer() async {
+    if (_isNavigating) return; // Prevent if already navigating
+    setState(() {
+      _isNavigating = true;
+    });
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AudioPlayerPage(
+            audioUrl: widget.mediaItem.id,
+            title: widget.mediaItem.title,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isNavigating = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final audioHandler = Provider.of<AudioPlayerHandler>(context);
-
-    return StreamBuilder<bool>(
-      stream: audioHandler.playbackState.map((state) => state.playing).distinct(),
-      builder: (context, snapshot) {
-        final isPlaying = snapshot.data ?? false;
-        if (!isPlaying) {
-          return const SizedBox.shrink(); // Não mostra nada se não estiver tocando
-        } else {
-          final mediaItem = audioHandler.mediaItem.value;
-          if (mediaItem == null) return const SizedBox.shrink();
-
-          return GestureDetector(
-            onTap: () {
-              // Navega para a página de player completo
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AudioPlayerPage(
-                    key: ValueKey<int>(int.parse(mediaItem.id)),
-                    audioUrl: mediaItem.id,
-                    title: mediaItem.title,
-                    imageUrl: mediaItem.artUri?.toString() ?? '',
-                  ),
-                ),
-              );
-            },
-            child: Container(
-              color: Colors.grey[800],
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  if (mediaItem.artUri != null)
-                    _buildImage(mediaItem.artUri!)
-                  else
-                    const Icon(
-                      Icons.music_note,
-                      size: 50,
-                      color: Colors.white,
-                    ),
-                  const SizedBox(width: 8.0),
-                  Expanded(
-                    child: Text(
-                      mediaItem.title,
-                      style: const TextStyle(color: Colors.white),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      audioHandler.playbackState.value.playing ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                    ),
-                    onPressed: () {
-                      if (audioHandler.playbackState.value.playing) {
-                        audioHandler.pause();
-                      } else {
-                        audioHandler.play();
-                      }
-                    },
-                  ),
-                ],
+    return GestureDetector(
+      onTap: _navigateToPlayer,
+      child: Container(
+        color: Colors.grey[800],
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          children: [
+            if (widget.mediaItem.imageBytes != null)
+              Image.memory(
+                widget.mediaItem.imageBytes!,
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+              )
+            else
+              const Icon(
+                Icons.music_note,
+                size: 50,
+                color: Colors.white,
+              ),
+            const SizedBox(width: 8.0),
+            Expanded(
+              child: Text(
+                widget.mediaItem.title,
+                style: const TextStyle(color: Colors.white),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          );
-        }
-      },
+            IconButton(
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
+              onPressed: () {
+                // Implement play functionality without triggering navigation
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
+}
 
   Widget _buildImage(Uri artUri) {
     if (artUri.scheme == 'asset') {
@@ -107,4 +109,3 @@ class MinimizedPlayer extends StatelessWidget {
       );
     }
   }
-}

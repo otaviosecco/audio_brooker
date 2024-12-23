@@ -1,46 +1,32 @@
+import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
-import 'dart:async';
-import 'package:rxdart/rxdart.dart';
-
-class DurationState {
-  final Duration position;
-  final Duration bufferedPosition;
-  final Duration total;
-
-  DurationState({required this.position, required this.bufferedPosition, required this.total});
-}
 
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
-  final _player = AudioPlayer();
-
-  // BehaviorSubject para controle de duração
-  final _durationState = BehaviorSubject<DurationState>();
+  final AudioPlayer _player = AudioPlayer();
 
   AudioPlayerHandler() {
-    // Listen to playback events from the player
-    _player.playbackEventStream.listen(_broadcastPlaybackEvent, onError: (error) {
-      // Handle errors
-      print('Error in playbackEventStream: $error');
-    });
+    // Listen to playback events and map them to PlaybackState
+    _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // Listen to duration changes if needed
+    // Listen to duration changes and update MediaItem accordingly
+    _player.durationStream.listen((duration) {
+      if (mediaItem.value != null && duration != null) {
+        final updatedMediaItem = mediaItem.value!.copyWith(duration: duration);
+        mediaItem.add(updatedMediaItem);
+        print('MediaItem updated with duration: $duration'); // Debugging
+      }
+    });
   }
 
-  void _broadcastPlaybackEvent(PlaybackEvent event) {
-    // Atualiza o estado de reprodução
-    playbackState.add(playbackState.value.copyWith(
+  PlaybackState _transformEvent(PlaybackEvent event) {
+    return PlaybackState(
       controls: [
         MediaControl.skipToPrevious,
         if (_player.playing) MediaControl.pause else MediaControl.play,
         MediaControl.stop,
         MediaControl.skipToNext,
       ],
-      systemActions: {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
       androidCompactActionIndices: const [0, 1, 3],
       processingState: {
         ProcessingState.idle: AudioProcessingState.idle,
@@ -48,41 +34,47 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         ProcessingState.buffering: AudioProcessingState.buffering,
         ProcessingState.ready: AudioProcessingState.ready,
         ProcessingState.completed: AudioProcessingState.completed,
-      }[event.processingState]!,
+      }[_player.processingState]!,
       playing: _player.playing,
       updatePosition: _player.position,
       bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
       queueIndex: event.currentIndex,
-    ));
-
-    // Atualiza DurationState
-    _durationState.add(DurationState(
-      position: _player.position,
-      bufferedPosition: _player.bufferedPosition,
-      total: _player.duration ?? Duration.zero,
-    ));
+    );
   }
 
-  Future<void> setAudioSource(String url, String title, String imageUrl) async {
-    final mediaItem = MediaItem(
+  Future<void> setAudioSource(String url, String title, Uint8List? imageBytes) async {
+    // Create MediaItem with extras
+    final newMediaItem = MediaItem(
       id: url,
+      album: "Album Name", // Replace with actual album if available
       title: title,
-      artUri: Uri.parse(imageUrl),
+      artist: "Artist Name", // Replace with actual artist if available
+      duration: Duration.zero, // Will be updated once duration is fetched
+      extras: {'imageBytes': imageBytes}, // Pass imageBytes here
     );
 
-    // Adiciona o MediaItem
-    this.mediaItem.add(mediaItem);
+    // Update MediaItem stream
+    mediaItem.add(newMediaItem);
+    print('MediaItem set with imageBytes: ${imageBytes?.length ?? 0}'); // Debugging
 
-    // Configura a fonte de áudio
+    // Set the audio source
     try {
       await _player.setUrl(url);
-      this.mediaItem.add(mediaItem);
+      print('Audio source set for URL: $url'); // Debugging
     } catch (e) {
-      print('Erro ao configurar a URL: $e');
+      print('Error setting audio source: $e');
+      throw e; // Re-throw to handle it upstream if needed
+    }
+
+    // Update MediaItem with actual duration if available
+    if (_player.duration != null) {
+      final updatedMediaItem = newMediaItem.copyWith(duration: _player.duration);
+      mediaItem.add(updatedMediaItem);
+      print('MediaItem updated with actual duration: ${_player.duration}'); // Debugging
     }
   }
-  // Outros métodos para controlar a reprodução
+
   @override
   Future<void> play() => _player.play();
 
@@ -90,51 +82,26 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() async {
+    await _player.stop();
+    await super.stop();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> skipToNext() async {
-    // Implementar lógica para avançar para o próximo
-  }
+  Future<void> skipToNext() => _player.seekToNext();
 
   @override
-  Future<void> skipToPrevious() async {
-    // Implementar lógica para voltar para o anterior
-  }
+  Future<void> skipToPrevious() => _player.seekToPrevious();
 
-  // Configurar mídia dinâmica
-  // Dentro do AudioPlayerHandler:
-  Future<void> setDynamicAudioSource(String audioPath, String title, String? imageUrl) async {
-    if (audioPath.startsWith('assets/')) {
-      await _player.setAsset(audioPath);
-    } else {
-      await _player.setFilePath(audioPath);
-    }
+  @override
+  Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
-    // Obtenha a duração após configurar a fonte
-    final duration = _player.duration ?? Duration.zero;
-
-    // Ajuste o artUri com um esquema personalizado
-    Uri? artUri;
-    if (imageUrl != null) {
-      if (imageUrl.startsWith('assets/')) {
-        // Prefixe com 'asset:///'
-        artUri = Uri.parse('asset:///$imageUrl');
-      } else {
-        // Utilize Uri.file para arquivos locais
-        artUri = Uri.file(imageUrl);
-      }
-    }
-
-    mediaItem.add(MediaItem(
-      id: audioPath,
-      album: 'Seu Álbum',
-      title: title,
-      artUri: artUri,
-      duration: duration,
-    ));
+  @override
+  Future<void> dispose() async {
+    await _player.dispose();
+    // No need to call super.dispose() as it is not defined in the superclass
   }
 }

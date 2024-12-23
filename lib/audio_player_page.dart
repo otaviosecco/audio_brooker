@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
-import 'dart:io';
 import 'audio_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
+import 'dart:typed_data';
+import 'package:image/image.dart' as img;
 
 class AudioPlayerPage extends StatefulWidget {
   final String audioUrl;
-  final String imageUrl;
+  final Uint8List? imageBytes; // Add this parameter
   final String title;
 
   const AudioPlayerPage({
     super.key,
     required this.audioUrl,
-    required this.imageUrl,
+    this.imageBytes,
     required this.title,
   });
 
@@ -37,9 +38,9 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       final currentMediaItem = audioHandler.mediaItem.value;
       if (currentMediaItem == null || currentMediaItem.id != widget.audioUrl) {
         await audioHandler.setAudioSource(
-          widget.audioUrl,   // Passa a URL diretamente
+          widget.audioUrl, // Pass the URL directly
           widget.title,
-          widget.imageUrl,
+          widget.imageBytes,
         );
         await audioHandler.play();
       }
@@ -54,18 +55,18 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          // Botão para Lista de Capítulos
+          // Button for Chapters List
           IconButton(
             icon: const Icon(Icons.list),
             onPressed: () {
-              // Implementar função para mostrar a lista de capítulos
+              // Implement function to show chapters list
             },
           ),
-          // Botão para Adicionar Marcador
+          // Button to Add Bookmark
           IconButton(
             icon: const Icon(Icons.bookmark_add),
             onPressed: () {
-              // Implementar função para adicionar um marcador
+              // Implement function to add a bookmark
             },
           ),
         ],
@@ -75,24 +76,16 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         child: Column(
           children: [
             // Thumbnail
-            StreamBuilder<MediaItem?>(
-              stream: audioHandler.mediaItem,
-              builder: (context, snapshot) {
-                final mediaItem = snapshot.data;
-                if (mediaItem?.artUri != null) {
-                  return _buildImage(mediaItem!.artUri!);
-                } else {
-                  return const Icon(
+            widget.imageBytes != null
+                ? buildCoverArt(widget.imageBytes)
+                : const Icon(
                     Icons.music_note,
-                    size: 50,
+                    size: 360,
                     color: Colors.white,
-                  );
-                }
-              },
-            ),
+                  ),
             const SizedBox(height: 24.0),
 
-            // Barra de progresso
+            // Progress Bar
             StreamBuilder<DurationState>(
               stream: Rx.combineLatest3<Duration, Duration, Duration, DurationState>(
                 audioHandler.playbackState.map((state) => state.position),
@@ -114,7 +107,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                     Slider(
                       min: 0.0,
                       max: totalDuration.inMilliseconds.toDouble(),
-                      value: position.inMilliseconds.toDouble().clamp(0.0, totalDuration.inMilliseconds.toDouble()),
+                      value: position.inMilliseconds.toDouble().clamp(
+                          0.0, totalDuration.inMilliseconds.toDouble()),
                       onChanged: (value) {
                         audioHandler.seek(Duration(milliseconds: value.toInt()));
                       },
@@ -125,7 +119,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(_formatDuration(position)),
-                          Text('-${_formatDuration(totalDuration - position)}',
+                          Text(
+                            '-${_formatDuration(totalDuration - position)}',
                           ),
                         ],
                       ),
@@ -136,33 +131,36 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
             ),
             const SizedBox(height: 24.0),
 
-            // Botões de controle
+            // Control Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Botão 'Voltar Áudio'
+                // 'Previous Audio' Button
                 IconButton(
                   icon: const Icon(Icons.skip_previous),
                   iconSize: 36.0,
                   onPressed: audioHandler.skipToPrevious,
                 ),
-                // Botão 'Voltar 30 Segundos'
+                // 'Rewind 30 Seconds' Button
                 IconButton(
                   icon: const Icon(Icons.replay_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = audioHandler.playbackState.value.position - const Duration(seconds: 30);
+                    final newPosition =
+                        audioHandler.playbackState.value.position -
+                            const Duration(seconds: 30);
                     audioHandler.seek(
                       newPosition >= Duration.zero ? newPosition : Duration.zero,
                     );
                   },
                 ),
-                // Botão 'Play/Pause'
+                // 'Play/Pause' Button
                 StreamBuilder<PlaybackState>(
                   stream: audioHandler.playbackState,
                   builder: (context, snapshot) {
                     final playbackState = snapshot.data;
-                    final processingState = playbackState?.processingState ?? AudioProcessingState.idle;
+                    final processingState =
+                        playbackState?.processingState ?? AudioProcessingState.idle;
                     final isPlaying = playbackState?.playing ?? false;
 
                     if (processingState == AudioProcessingState.loading ||
@@ -183,19 +181,22 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                     }
                   },
                 ),
-                // Botão 'Avançar 30 Segundos'
+                // 'Forward 30 Seconds' Button
                 IconButton(
                   icon: const Icon(Icons.forward_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition = audioHandler.playbackState.value.position + const Duration(seconds: 30);
-                    final totalDuration = audioHandler.mediaItem.value?.duration ?? Duration.zero;
+                    final newPosition =
+                        audioHandler.playbackState.value.position +
+                            const Duration(seconds: 30);
+                    final totalDuration =
+                        audioHandler.mediaItem.value?.duration ?? Duration.zero;
                     audioHandler.seek(
                       newPosition <= totalDuration ? newPosition : totalDuration,
                     );
                   },
                 ),
-                // Botão 'Avançar Áudio'
+                // 'Next Audio' Button
                 IconButton(
                   icon: const Icon(Icons.skip_next),
                   iconSize: 36.0,
@@ -205,7 +206,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
             ),
             const SizedBox(height: 24.0),
 
-            // Botão de Velocidade de Reprodução
+            // Playback Speed Button
             ElevatedButton.icon(
               icon: const Icon(Icons.speed),
               label: Text('Velocidade: ${_playbackSpeed}x'),
@@ -217,7 +218,47 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     );
   }
 
-  // Mostrar diálogo para selecionar a velocidade de reprodução
+  Widget buildCoverArt(Uint8List? coverArtBytes) {
+    if (coverArtBytes == null || coverArtBytes.isEmpty) {
+      return const Icon(Icons.music_note, size: 360, color: Colors.white);
+    }
+    try {
+      final bytes = coverArtBytes;
+
+      // Decode and resize the image
+      img.Image? originalImage = img.decodeImage(bytes);
+      if (originalImage == null) {
+        print('Error decoding image');
+        return const Icon(Icons.music_note, size: 360, color: Colors.white);
+      }
+      img.Image resizedImage =
+          img.copyResize(originalImage, width: 350, height: 350);
+      final resizedBytes = Uint8List.fromList(img.encodeJpg(resizedImage));
+
+      return Image.memory(
+        resizedBytes,
+        width: 360,
+        height: 360,
+        fit: BoxFit.cover,
+      );
+    } catch (e) {
+      print('Error decoding cover art: $e');
+      return const Icon(Icons.music_note, size: 360, color: Colors.white);
+    }
+  }
+
+  // Change Playback Speed
+  void _changePlaybackSpeed(double? speed) {
+    if (speed != null) {
+      setState(() {
+        _playbackSpeed = speed;
+        audioHandler.setSpeed(speed);
+      });
+      Navigator.pop(context);
+    }
+  }
+
+  // Show Dialog to Select Playback Speed
   void _showPlaybackSpeedDialog() {
     showDialog<double>(
       context: context,
@@ -264,45 +305,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     );
   }
 
-  Widget _buildImage(Uri artUri) {
-    if (artUri.scheme == 'asset') {
-      // Se o artUri usa o esquema 'asset', carregue usando Image.asset
-      return Image.asset(
-        artUri.path.replaceFirst('/', ''), // Remova a primeira '/' do path
-        width: 350,
-        height: 350,
-        fit: BoxFit.cover,
-      );
-    } else if (artUri.scheme == 'file') {
-      // Se for um arquivo local, use Image.file
-      return Image.file(
-        File(artUri.toFilePath()),
-        width: 350,
-        height: 350,
-        fit: BoxFit.cover,
-      );
-    } else {
-      // Caso contrário, exiba um placeholder ou ícone padrão
-      return const Icon(
-        Icons.music_note,
-        size: 350,
-        color: Colors.white,
-      );
-    }
-  }
-
-  // Alterar velocidade de reprodução
-  void _changePlaybackSpeed(double? speed) {
-    if (speed != null) {
-      setState(() {
-        _playbackSpeed = speed;
-        audioHandler.setSpeed(speed);
-      });
-      Navigator.pop(context);
-    }
-  }
-
-  // Formatação da duração
+  // Format Duration
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
