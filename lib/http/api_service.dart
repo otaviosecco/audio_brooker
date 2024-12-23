@@ -3,11 +3,13 @@ import 'package:http_interceptor/http_interceptor.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import '../audio_model.dart';
+
 final http.Client client = InterceptedClient.build(
   interceptors: [LoggingInterceptor()],
 );
 
-const String baseUrl = 'http://192.168.1.8:3000';
+const String baseUrl = 'http://192.168.1.53:3000';
 
 class LoggingInterceptor implements InterceptorContract {
   @override
@@ -21,9 +23,6 @@ class LoggingInterceptor implements InterceptorContract {
     print('Response');
     print('Status code: ${response.statusCode}');
     print('Headers: ${response.headers}');
-    if (response is http.Response) {
-      print('Body: ${response.body}');
-    }
     return response;
   }
 
@@ -55,11 +54,12 @@ class ApiService {
     }
   }
 
-  static Future<List<dynamic>> fetchAudioList() async {
+  static Future<List<AudioModel>> fetchAudioList() async {
     final response = await client.get(Uri.parse('$baseUrl/audioList'));
 
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      List<dynamic> jsonList = json.decode(response.body);
+      return jsonList.map((json) => AudioModel.fromJson(json)).toList();
     } else {
       throw Exception('Failed to load audio list');
     }

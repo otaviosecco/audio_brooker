@@ -1,32 +1,20 @@
-import Hapi from '@hapi/hapi';
+import { server as _server } from '@hapi/hapi';
 import Inert from '@hapi/inert';
+import { existsSync, readdirSync } from 'fs';
+import { join, parse, dirname } from 'path';
+import jsmediatags from 'jsmediatags';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const users = [
-  { username: 'user', password: 'senha' },
-];
-
-const audioList = [
-  {
-    id: 1,
-    title: 'RenanAud.mp3',
-    audioUrl: 'http://192.168.1.8:3000/audios/RenanAud.mp3',
-    imageUrl: 'http://192.168.1.8:3000/images/RenanImg.png',
-  },
-  // Adicione mais itens conforme necessário
-];
-
 const init = async () => {
-  const server = Hapi.server({
+  const server = _server({
     port: 3000,
-    host: '0.0.0.0',
+    host: '192.168.1.53', // Ajuste se necessário
     routes: {
       cors: {
-        origin: ['*'], // Permite todas as origens
+        origin: ['*'],
       },
       files: {
         relativeTo: join(__dirname, 'public'),
@@ -34,34 +22,88 @@ const init = async () => {
     },
   });
 
-  // Registrar o plugin Inert para servir arquivos estáticos
   await server.register(Inert);
+  
+  // Ler tags de um arquivo MP3 e retornar objeto com dados
+  const readMp3Tags = (filePath) => {
+    return new Promise((resolve) => {
+      jsmediatags.read(filePath, {
+        onSuccess: (tag) => {
+          let coverArt = null;
+          const image = tag.tags.picture;
+          if (image) {
+            let base64String = '';
+            for (let i = 0; i < image.data.length; i++) {
+              base64String += String.fromCharCode(image.data[i]);
+            }
+            coverArt = `data:${image.format};base64,${Buffer.from(base64String, 'binary').toString('base64')}`;
+          }
+          resolve({
+            title: tag.tags.title || parse(filePath).name,
+            artist: tag.tags.artist || 'Unknown',
+            album: tag.tags.album || 'Unknown',
+            coverArt: coverArt,
+          });
+        },
+        onError: () => {
+          resolve(null);
+        },
+      });
+    });
+  };
+  
+  // Gera lista de áudios lendo as tags de cada arquivo
+  const gerarAudioList = async () => {
+    const audiosDir = join(__dirname, 'public/audios');
+    if (!existsSync(audiosDir)) {
+      console.error('Diretório de áudios não encontrado.');
+      return [];
+    }
+    const audioFiles = readdirSync(audiosDir).filter((file) => /\.(mp3|wav|ogg)$/i.test(file));
 
-  // Rota para o login
-  server.route({
-    method: 'POST',
-    path: '/login',
-    handler: (request, h) => {
-      const { username, password } = request.payload;
-      const user = users.find(u => u.username === username && u.password === password);
-      if (user) {
-        return h.response('Login successful').code(200);
-      } else {
-        return h.response('Invalid credentials').code(401);
-      }
-    },
-  });
+    // Ler tags de todos os arquivos
+    const mp3Info = await Promise.all(
+      audioFiles.map(async (audioFile, index) => {
+        const filepath = join(audiosDir, audioFile);
+        const info = await readMp3Tags(filepath);
+        return {
+          id: index + 1,
+          title: info?.title || parse(audioFile).name,
+          artist: info?.artist,
+          album: info?.album,
+          audioUrl: `http://${server.info.address}:${server.info.port}/audios/${audioFile}`,
+          coverArt: info?.coverArt, // base64 da capa (se existir)
+        };
+      })
+    );
+    return mp3Info;
+  };
 
   // Rota para obter a lista de áudios
   server.route({
     method: 'GET',
     path: '/audioList',
-    handler: (request, h) => {
+    handler: async (request, h) => {
+      const audioList = await gerarAudioList();
       return h.response(audioList).code(200);
     },
   });
 
-  // Rota para servir arquivos estáticos (áudios e imagens)
+  // Rota para servir arquivos de áudio
+  server.route({
+    method: 'GET',
+    path: '/audios/{param*}',
+    handler: {
+      directory: {
+        path: 'audios',
+        redirectToSlash: true,
+        index: false,
+      },
+    },
+  });
+
+
+  // Rota para servir arquivos estáticos sob demanda
   server.route({
     method: 'GET',
     path: '/{param*}',
@@ -73,14 +115,12 @@ const init = async () => {
       },
     },
   });
-
+  server.ext('onRequest', (request, h) => {
+    console.log(`Received request for: ${request.path}`);
+    return h.continue;
+  });
   await server.start();
   console.log('Server running on %s', server.info.uri);
 };
-
-process.on('unhandledRejection', err => {
-  console.log(err);
-  process.exit(1);
-});
 
 init();

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'audio_handler.dart';
-import 'login_page.dart';
+import 'audio_list_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized(); // Adicione esta linha
@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         ),
-        home: LoginPage(audioHandler: audioHandler),
+        home: AudioListPage(audioHandler: audioHandler),
       ),
     );
   }
