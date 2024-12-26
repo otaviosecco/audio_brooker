@@ -42,3 +42,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 backend/public/audios/O Silmarillion \[B0DK5YR3TQ\].mp3
+backend/public/audios/O Hobbit \[B0CYHWFKPS\].mp3

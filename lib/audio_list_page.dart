@@ -1,12 +1,15 @@
+// ...existing code...
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:audio_service/audio_service.dart'; // Add this import
 import 'package:image/image.dart' as img; // Add this import
 import 'audio_handler.dart';
 import 'audio_player_page.dart';
 import 'audio_model.dart';
 import 'http/api_service.dart';
+import 'minimized_player.dart';
 
 class AudioListPage extends StatefulWidget {
   final AudioPlayerHandler audioHandler;
@@ -78,25 +81,44 @@ class _AudioListPageState extends State<AudioListPage> {
       appBar: AppBar(
         title: const Text('Lista de Áudios'),
       ),
-      body: ListView.builder(
-        itemCount: audioList.length,
-        itemBuilder: (context, index) {
-          final audioItem = audioList[index];
-          return ListTile(
-            leading: buildCoverArt(audioItem.coverArt, (resizedImage) {
-              _openAudioPlayer(audioItem, resizedImage);
-            }),
-            title: Text(audioItem.title),
-            onTap: () {}, // Handled in buildCoverArt callback
-          );
-        },
+      body: Stack(
+        children: [
+          ListView.builder(
+            itemCount: audioList.length,
+            itemBuilder: (context, index) {
+              final audioItem = audioList[index];
+              return ListTile(
+                leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
+                title: Text(audioItem.title),
+                onTap: () {
+                  buildCoverArt(audioItem.coverArt, (resizedImage) {
+                    _openAudioPlayer(audioItem, resizedImage);
+                  });
+                },
+              );
+            },
+          ),
+          StreamBuilder<MediaItem?>(
+            stream: audioHandler.mediaItem,
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data != null) {
+                return Align(
+                  alignment: Alignment.bottomCenter,
+                  child: MinimizedPlayer(mediaItem: snapshot.data!),
+                );
+              } else {
+                return const SizedBox.shrink();
+              }
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget buildCoverArt(String? coverArtBase64, Function(Uint8List?) onImageReady) {
     if (coverArtBase64 == null || coverArtBase64.isEmpty) {
-      return Icon(Icons.music_note, size: 40);
+      return const Icon(Icons.music_note, size: 40);
     }
     try {
       String base64String = coverArtBase64.contains(',')
@@ -109,7 +131,7 @@ class _AudioListPageState extends State<AudioListPage> {
       if (originalImage == null) {
         print('Error decoding image');
         onImageReady(null);
-        return Icon(Icons.music_note, size: 40);
+        return const Icon(Icons.music_note, size: 40);
       }
       img.Image resizedImage = img.copyResize(originalImage, width: 350, height: 350);
       final resizedBytes = Uint8List.fromList(img.encodeJpg(resizedImage));
@@ -121,7 +143,7 @@ class _AudioListPageState extends State<AudioListPage> {
     } catch (e) {
       print('Error decoding cover art: $e');
       onImageReady(null);
-      return Icon(Icons.music_note, size: 40);
+      return const Icon(Icons.music_note, size: 40);
     }
   }
 }

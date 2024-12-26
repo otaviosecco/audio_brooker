@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'dart:async';
 
-class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
+class AudioPlayerHandler extends BaseAudioHandler {
+  final StreamController<MediaItem?> _mediaItemController = StreamController<MediaItem?>.broadcast();
   final AudioPlayer _player = AudioPlayer();
+  bool _isAddingStream = false;
 
   AudioPlayerHandler() {
     // Listen to playback events and map them to PlaybackState
@@ -84,7 +87,14 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> stop() async {
     await _player.stop();
-    await super.stop();
+    if (!_mediaItemController.isClosed) {
+      _mediaItemController.add(null); // Emit null when stopped
+    }
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _mediaItemController.close();
   }
 
   @override
@@ -99,9 +109,15 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
-  @override
-  Future<void> dispose() async {
-    await _player.dispose();
-    // No need to call super.dispose() as it is not defined in the superclass
+  Future<void> addMediaItems(Stream<MediaItem> mediaStream) async {
+    if (_isAddingStream) return;
+    _isAddingStream = true;
+    try {
+      await _mediaItemController.addStream(mediaStream);
+    } catch (e) {
+      print('Error adding stream: $e');
+    } finally {
+      _isAddingStream = false;
+    }
   }
 }

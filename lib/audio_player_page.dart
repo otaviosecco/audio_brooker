@@ -54,15 +54,21 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context).pop();
+            });
+          },
+        ),
         actions: [
-          // Button for Chapters List
           IconButton(
             icon: const Icon(Icons.list),
             onPressed: () {
               // Implement function to show chapters list
             },
           ),
-          // Button to Add Bookmark
           IconButton(
             icon: const Icon(Icons.bookmark_add),
             onPressed: () {
