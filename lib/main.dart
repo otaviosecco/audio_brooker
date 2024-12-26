@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
     return Provider<AudioPlayerHandler>.value(
       value: audioHandler,
       child: MaterialApp(
-        title: 'Tocador de Áudio',
+        title: 'Audio Brooker',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         ),

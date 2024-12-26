@@ -1,4 +1,3 @@
-// ...existing code...
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -98,18 +97,90 @@ class _AudioListPageState extends State<AudioListPage> {
               );
             },
           ),
-          StreamBuilder<MediaItem?>(
-            stream: audioHandler.mediaItem,
-            builder: (context, snapshot) {
-              if (snapshot.hasData && snapshot.data != null) {
-                return Align(
-                  alignment: Alignment.bottomCenter,
-                  child: MinimizedPlayer(mediaItem: snapshot.data!),
-                );
-              } else {
-                return const SizedBox.shrink();
-              }
-            },
+          Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              ListView.builder(
+                itemCount: audioList.length,
+                itemBuilder: (context, index) {
+                  final audioItem = audioList[index];
+                  return ListTile(
+                    leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
+                    title: Text(audioItem.title),
+                    onTap: () {
+                      buildCoverArt(audioItem.coverArt, (resizedImage) {
+                        _openAudioPlayer(audioItem, resizedImage);
+                      });
+                    },
+                  );
+                },
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.grey, // Add background color here
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          alignment: Alignment.center,
+                          onPressed: () async {
+                            final TextEditingController ytLinkController = TextEditingController();
+                            final ytLink = await showDialog<String>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: const Text('YouTube Link'),
+                                  content: TextField(
+                                    controller: ytLinkController,
+                                    decoration: const InputDecoration(hintText: 'Enter YouTube link here'),
+                                  ),
+                                  actions: <Widget>[
+                                    TextButton(
+                                      child: const Text('Cancel'),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                    TextButton(
+                                      child: const Text('OK'),
+                                      onPressed: () {
+                                        Navigator.of(context).pop(ytLinkController.text);
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                            if (ytLink != null && ytLink.isNotEmpty) {
+                              // Handle the YouTube link here
+                              final apiService = ApiService();
+                              apiService.addFromYoutube(ytLink);
+                            }
+                          },
+                          icon: const Icon(Icons.add),
+                        ),
+                      ),
+                    ),
+                    StreamBuilder<MediaItem?>(
+                      stream: audioHandler.mediaItem,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data != null) {
+                          return MinimizedPlayer(mediaItem: snapshot.data!);
+                        } else {
+                          return const SizedBox.shrink();
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],            
           ),
         ],
       ),

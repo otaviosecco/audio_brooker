@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from 'fs';
 import { join, parse, dirname } from 'path';
 import jsmediatags from 'jsmediatags';
 import { fileURLToPath } from 'url';
+import { downloadAndConvertToMp3 } from './parseYt.js'; // Import the function
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -102,6 +103,31 @@ const init = async () => {
     },
   });
 
+  // Rota para baixar e converter vídeo do YouTube para MP3
+  server.route({
+    method: 'POST',
+    path: '/download',
+    handler: async (request, h) => {
+      console.log('Received payload:', request.payload); // Log completo do payload
+      const { youtubeUrl } = request.payload;
+      console.log('youtubeUrl:', youtubeUrl); // Log específico do youtubeUrl
+
+      if (!youtubeUrl) {
+        console.error('YouTube URL is required');
+        return h.response({ error: 'YouTube URL is required' }).code(400);
+      }
+
+      try {
+        console.log('Processing YouTube URL:', youtubeUrl);
+        const result = await downloadAndConvertToMp3(youtubeUrl);
+        console.log('Conversion result:', result);
+        return h.response({ message: 'Download and conversion started', result }).code(200);
+      } catch (error) {
+        console.error('Error downloading and converting video:', error);
+        return h.response({ error: 'Failed to download and convert video' }).code(500);
+      }
+    }
+  });
 
   // Rota para servir arquivos estáticos sob demanda
   server.route({
@@ -115,10 +141,12 @@ const init = async () => {
       },
     },
   });
+
   server.ext('onRequest', (request, h) => {
     console.log(`Received request for: ${request.path}`);
     return h.continue;
   });
+
   await server.start();
   console.log('Server running on %s', server.info.uri);
 };
