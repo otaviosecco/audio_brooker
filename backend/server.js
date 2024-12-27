@@ -1,10 +1,10 @@
 import { server as _server } from '@hapi/hapi';
 import Inert from '@hapi/inert';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, parse, dirname } from 'path';
 import jsmediatags from 'jsmediatags';
 import { fileURLToPath } from 'url';
-import { downloadAndConvertToMp3 } from './parseYt.js'; // Import the function
+import { downloadAndConvertToMp3 } from './parseYt.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +12,7 @@ const __dirname = dirname(__filename);
 const init = async () => {
   const server = _server({
     port: 3000,
-    host: '192.168.1.53', // Ajuste se necessário
+    host: '172.25.224.1',
     routes: {
       cors: {
         origin: ['*'],
@@ -24,8 +24,7 @@ const init = async () => {
   });
 
   await server.register(Inert);
-  
-  // Ler tags de um arquivo MP3 e retornar objeto com dados
+
   const readMp3Tags = (filePath) => {
     return new Promise((resolve) => {
       jsmediatags.read(filePath, {
@@ -52,8 +51,7 @@ const init = async () => {
       });
     });
   };
-  
-  // Gera lista de áudios lendo as tags de cada arquivo
+
   const gerarAudioList = async () => {
     const audiosDir = join(__dirname, 'public/audios');
     if (!existsSync(audiosDir)) {
@@ -62,7 +60,6 @@ const init = async () => {
     }
     const audioFiles = readdirSync(audiosDir).filter((file) => /\.(mp3|wav|ogg)$/i.test(file));
 
-    // Ler tags de todos os arquivos
     const mp3Info = await Promise.all(
       audioFiles.map(async (audioFile, index) => {
         const filepath = join(audiosDir, audioFile);
@@ -73,7 +70,7 @@ const init = async () => {
           artist: info?.artist,
           album: info?.album,
           audioUrl: `http://${server.info.address}:${server.info.port}/audios/${audioFile}`,
-          coverArt: info?.coverArt, // base64 da capa (se existir)
+          coverArt: info?.coverArt,
         };
       })
     );
@@ -88,6 +85,23 @@ const init = async () => {
       const audioList = await gerarAudioList();
       return h.response(audioList).code(200);
     },
+  });
+
+  // Rota para obter a lista de capítulos
+  server.route({
+    method: 'GET',
+    path: '/chapters',
+    handler: async (request, h) => {
+      const { filename } = request.query;
+      try {
+        const dataPath = join(__dirname, 'public', 'data', `${filename}.json`);
+        const fileData = readFileSync(dataPath, 'utf-8');
+        return h.response(JSON.parse(fileData)).code(200);
+      } catch (error) {
+        // Se não houver arquivo JSON correspondente, retornar capítulo único "Principal"
+        return h.response([{ start_time: 0, title: 'Principal' }]).code(200);
+      }
+    }
   });
 
   // Rota para servir arquivos de áudio
@@ -108,9 +122,9 @@ const init = async () => {
     method: 'POST',
     path: '/download',
     handler: async (request, h) => {
-      console.log('Received payload:', request.payload); // Log completo do payload
+      console.log('Received payload:', request.payload);
       const { youtubeUrl } = request.payload;
-      console.log('youtubeUrl:', youtubeUrl); // Log específico do youtubeUrl
+      console.log('youtubeUrl:', youtubeUrl);
       if (!youtubeUrl) {
         console.error('YouTube URL is required');
         return h.response({ error: 'YouTube URL is required' }).code(400);
