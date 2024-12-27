@@ -1,9 +1,9 @@
 import 'package:http/http.dart' as http;
 import 'package:http_interceptor/http_interceptor.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:convert';
-import '../audio_model.dart';
+import '../classes/audio_model.dart';
+import '../classes/ytdl_notifier.dart';
 
 final http.Client client = InterceptedClient.build(
   interceptors: [LoggingInterceptor()],
@@ -75,13 +75,11 @@ class ApiService {
     }
   }
 
-  Future<void> addFromYoutube(String url) async {
+  Future<void> addFromYoutube(String url, ytdlNotifier) async {
     if (url.isEmpty) {
       throw Exception('YouTube URL cannot be empty');
     }
-
     print('Sending YouTube URL: $url'); // Log para verificar a URL
-
     final response = await client.post(
       Uri.parse('$baseUrl/download'),
       headers: <String, String>{
@@ -91,13 +89,12 @@ class ApiService {
         'youtubeUrl': url,
       }),
     );
-
     if (response.statusCode != 200) {
       throw Exception('Failed to add audio from YouTube: ${response.body}');
     }
     // If successful, fetch the updated audio list
     if(response.statusCode == 200) {
-      //chama o provider pra
+       ytdlNotifier.update();
     }
   }
 }

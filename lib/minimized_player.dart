@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'audio_handler.dart';
+import 'providers/audio_handler.dart';
 import 'audio_player_page.dart';
 import 'package:image/image.dart' as img;
 

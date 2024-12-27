@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:audio_service/audio_service.dart'; // Add this import
 import 'package:image/image.dart' as img; // Add this import
-import 'audio_handler.dart';
+import 'classes/ytdl_notifier.dart';
+import 'providers/audio_handler.dart';
 import 'audio_player_page.dart';
-import 'audio_model.dart';
+import 'classes/audio_model.dart';
 import 'http/api_service.dart';
 import 'minimized_player.dart';
 
@@ -25,6 +26,19 @@ class _AudioListPageState extends State<AudioListPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<YtdlNotifier>(context, listen: false).addListener(_onYtdlUpdate);
+      fetchAudioList(); // Optionally fetch the list on init
+    });
+  }
+
+  @override
+  void dispose() {
+    Provider.of<YtdlNotifier>(context, listen: false).removeListener(_onYtdlUpdate);
+    super.dispose();
+  }
+
+  void _onYtdlUpdate() {
     fetchAudioList();
   }
 
@@ -76,113 +90,116 @@ class _AudioListPageState extends State<AudioListPage> {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lista de Áudios'),
-      ),
-      body: Stack(
-        children: [
-          ListView.builder(
-            itemCount: audioList.length,
-            itemBuilder: (context, index) {
-              final audioItem = audioList[index];
-              return ListTile(
-                leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
-                title: Text(audioItem.title),
-                onTap: () {
-                  buildCoverArt(audioItem.coverArt, (resizedImage) {
-                    _openAudioPlayer(audioItem, resizedImage);
-                  });
-                },
-              );
-            },
-          ),
-          Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              ListView.builder(
-                itemCount: audioList.length,
-                itemBuilder: (context, index) {
-                  final audioItem = audioList[index];
-                  return ListTile(
-                    leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
-                    title: Text(audioItem.title),
-                    onTap: () {
-                      buildCoverArt(audioItem.coverArt, (resizedImage) {
-                        _openAudioPlayer(audioItem, resizedImage);
-                      });
-                    },
-                  );
-                },
-              ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.grey, // Add background color here
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          alignment: Alignment.center,
-                          onPressed: () async {
-                            final TextEditingController ytLinkController = TextEditingController();
-                            final ytLink = await showDialog<String>(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return AlertDialog(
-                                  title: const Text('YouTube Link'),
-                                  content: TextField(
-                                    controller: ytLinkController,
-                                    decoration: const InputDecoration(hintText: 'Enter YouTube link here'),
-                                  ),
-                                  actions: <Widget>[
-                                    TextButton(
-                                      child: const Text('Cancel'),
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
+    return ChangeNotifierProvider<YtdlNotifier>(
+      create: (context) => YtdlNotifier(),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Lista de Áudios'),
+        ),
+        body: Stack(
+          children: [
+            ListView.builder(
+              itemCount: audioList.length,
+              itemBuilder: (context, index) {
+                final audioItem = audioList[index];
+                return ListTile(
+                  leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
+                  title: Text(audioItem.title),
+                  onTap: () {
+                    buildCoverArt(audioItem.coverArt, (resizedImage) {
+                      _openAudioPlayer(audioItem, resizedImage);
+                    });
+                  },
+                );
+              },
+            ),
+            Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                ListView.builder(
+                  itemCount: audioList.length,
+                  itemBuilder: (context, index) {
+                    final audioItem = audioList[index];
+                    return ListTile(
+                      leading: buildCoverArt(audioItem.coverArt, (resizedImage) {}),
+                      title: Text(audioItem.title),
+                      onTap: () {
+                        buildCoverArt(audioItem.coverArt, (resizedImage) {
+                          _openAudioPlayer(audioItem, resizedImage);
+                        });
+                      },
+                    );
+                  },
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.grey, // Add background color here
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            alignment: Alignment.center,
+                            onPressed: () async {
+                              final TextEditingController ytLinkController = TextEditingController();
+                              final ytLink = await showDialog<String>(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    title: const Text('YouTube Link'),
+                                    content: TextField(
+                                      controller: ytLinkController,
+                                      decoration: const InputDecoration(hintText: 'Enter YouTube link here'),
                                     ),
-                                    TextButton(
-                                      child: const Text('OK'),
-                                      onPressed: () {
-                                        Navigator.of(context).pop(ytLinkController.text);
-                                      },
-                                    ),
-                                  ],
-                                );
-                              },
-                            );
-                            if (ytLink != null && ytLink.isNotEmpty) {
-                              // Handle the YouTube link here
-                              final apiService = ApiService();
-                              apiService.addFromYoutube(ytLink);
-                            }
-                          },
-                          icon: const Icon(Icons.add),
+                                    actions: <Widget>[
+                                      TextButton(
+                                        child: const Text('Cancel'),
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                        },
+                                      ),
+                                      TextButton(
+                                        child: const Text('OK'),
+                                        onPressed: () {
+                                          Navigator.of(context).pop(ytLinkController.text);
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                              if (ytLink != null && ytLink.isNotEmpty) {
+                                // Handle the YouTube link here
+                                final apiService = ApiService();
+                                apiService.addFromYoutube(ytLink, context.read<YtdlNotifier>());
+                              }
+                            },
+                            icon: const Icon(Icons.add),
+                          ),
                         ),
                       ),
-                    ),
-                    StreamBuilder<MediaItem?>(
-                      stream: audioHandler.mediaItem,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData && snapshot.data != null) {
-                          return MinimizedPlayer(mediaItem: snapshot.data!);
-                        } else {
-                          return const SizedBox.shrink();
-                        }
-                      },
-                    ),
-                  ],
+                      StreamBuilder<MediaItem?>(
+                        stream: audioHandler.mediaItem,
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData && snapshot.data != null) {
+                            return MinimizedPlayer(mediaItem: snapshot.data!);
+                          } else {
+                            return const SizedBox.shrink();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],            
-          ),
-        ],
+              ],            
+            ),
+          ],
+        ),
       ),
     );
   }
