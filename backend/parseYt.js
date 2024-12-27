@@ -49,8 +49,36 @@ export async function downloadAndConvertToMp3(youtubeUrl) {
 
     // Clean up thumbnail
     fs.unlinkSync(thumbnailPath);
+    console.log('Thumbnail cleaned up.');
 
-    return { status: 200, timestamps: info.chapters || [] };
+    // Save timestamps in data folder with "audioname.json"
+    const dataFolderPath = path.join('public', 'data');
+
+    if (!fs.existsSync(dataFolderPath)) {
+      fs.mkdirSync(dataFolderPath, { recursive: true });
+      console.log('Data directory created:', dataFolderPath);
+    }
+
+    if (!info.chapters || !Array.isArray(info.chapters) || info.chapters.length === 0) {
+      console.warn('No chapters found in video info.');
+      return { status: 200, timestamps: [] };
+    }
+
+    // Transform chapters to exclude end_time
+    const timestamps = info.chapters.map((chapter) => ({
+      start_time: chapter.start_time,
+      title: chapter.title,
+    }));
+    console.log('Transformed timestamps:', timestamps);
+
+    const jsonFileName = `${sanitizedTitle}.json`;
+    const jsonFilePath = path.join(dataFolderPath, jsonFileName);
+
+    // Write metadata to JSON file
+    fs.writeFileSync(jsonFilePath, JSON.stringify(timestamps, null, 2));
+    console.log('Timestamps saved to:', jsonFilePath);
+
+    return { status: 200, timestamps };
   } catch (error) {
     console.error('Error fetching video info or converting:', error);
     throw error;

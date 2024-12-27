@@ -51,9 +51,7 @@ class _AudioListPageState extends State<AudioListPage> {
       return audioList;
     } catch (e) {
       debugPrint('Error fetching audio list: $e');
-      setState(() {
-        audioList = [];
-      });
+      setState(() => audioList = []);
       return [];
     }
   }
@@ -159,15 +157,11 @@ class _AudioListPageState extends State<AudioListPage> {
                                     actions: <Widget>[
                                       TextButton(
                                         child: const Text('Cancel'),
-                                        onPressed: () {
-                                          Navigator.of(context).pop();
-                                        },
+                                        onPressed: () => Navigator.of(context).pop(),
                                       ),
                                       TextButton(
                                         child: const Text('OK'),
-                                        onPressed: () {
-                                          Navigator.of(context).pop(ytLinkController.text);
-                                        },
+                                        onPressed: () => Navigator.of(context).pop(ytLinkController.text),
                                       ),
                                     ],
                                   );

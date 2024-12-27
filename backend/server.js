@@ -111,12 +111,10 @@ const init = async () => {
       console.log('Received payload:', request.payload); // Log completo do payload
       const { youtubeUrl } = request.payload;
       console.log('youtubeUrl:', youtubeUrl); // Log específico do youtubeUrl
-
       if (!youtubeUrl) {
         console.error('YouTube URL is required');
         return h.response({ error: 'YouTube URL is required' }).code(400);
       }
-
       try {
         console.log('Processing YouTube URL:', youtubeUrl);
         const result = await downloadAndConvertToMp3(youtubeUrl);
