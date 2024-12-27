@@ -9,7 +9,7 @@ final http.Client client = InterceptedClient.build(
   interceptors: [LoggingInterceptor()],
 );
 
-const String baseUrl = 'http://192.168.1.53:3000';
+const String baseUrl = 'http://172.25.224.1:3000';
 
 class LoggingInterceptor implements InterceptorContract {
   @override
@@ -51,6 +51,15 @@ class ApiService {
       return true;
     } else {
       return false;
+    }
+  }
+
+  static Future<List<dynamic>> fetchChapters(String filename) async {
+    final response = await client.get(Uri.parse('$baseUrl/chapters?filename=$filename'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load chapters');
     }
   }
 

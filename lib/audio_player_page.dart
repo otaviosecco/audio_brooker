@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
+import 'http/api_service.dart';
 import 'providers/audio_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
+
+// adicionado:
+import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 
 class AudioPlayerPage extends StatefulWidget {
   final String audioUrl;
@@ -26,27 +33,96 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   late AudioPlayerHandler audioHandler;
   double _playbackSpeed = 1.0;
 
+  // Para armazenar capítulos
+  List<dynamic> _chapters = [];
+  // Para armazenar dados locais do usuário (posições salvas, etc.)
+  Map<String, dynamic> _userData = {};
+
   @override
   void initState() {
     super.initState();
-    audioHandler = Provider.of<AudioPlayerHandler>(context, listen: false);
-    _init();
+    _initAudioHandler();
+    _initChapters();
   }
 
-  Future<void> _init() async {
+  Future<void> _initAudioHandler() async {
+    audioHandler = Provider.of<AudioPlayerHandler>(context, listen: false);
     try {
-      final currentMediaItem = audioHandler.mediaItem.value;
-      if (currentMediaItem == null || currentMediaItem.id != widget.audioUrl) {
-        await audioHandler.setAudioSource(
-          widget.audioUrl, // Pass the URL directly
-          widget.title,
-          widget.imageBytes,
+      // Verifica se nada está em reprodução
+      if (audioHandler.mediaItem.value?.id != widget.audioUrl) {
+        await audioHandler.stop();
+        await audioHandler.updateQueue([]);
+        // Carrega o áudio atual
+        await audioHandler.addQueueItem(
+          MediaItem(
+            id: widget.audioUrl,
+            album: "",
+            title: widget.title,
+            artUri: Uri.parse(widget.audioUrl),
+          ),
         );
         await audioHandler.play();
       }
     } catch (e) {
       print('Erro ao carregar o áudio: $e');
     }
+  }
+
+  // Carrega capítulos
+  Future<void> _initChapters() async {
+    await _loadUserData();
+    final filename = widget.title.replaceAll(' ', '%20');
+    try {
+      // Tenta buscar os capítulos no backend
+      final apiService = ApiService();
+      final responseChapters = await ApiService.fetchChapters(filename);
+      _chapters = responseChapters;
+    } catch (e) {
+      // Se falhar, define capítulos vazios
+      _chapters = [];
+    }
+    _resumePositionIfAvailable();
+  }
+
+  // Tenta retomar a posição caso exista
+  void _resumePositionIfAvailable() {
+    final lastPos = _userData[widget.audioUrl]?.toString() ?? '0';
+    if (audioHandler.playbackState.value.position == Duration.zero && lastPos != '0') {
+      audioHandler.seek(Duration(seconds: int.tryParse(lastPos) ?? 0));
+    }
+  }
+
+  // Carrega dados locais (posições de cada áudio)
+  Future<void> _loadUserData() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/user_data.json');
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        _userData = json.decode(contents);
+      }
+    } catch (e) {
+      _userData = {};
+    }
+  }
+
+  // Salva dados locais (posição atual do áudio)
+  Future<void> _saveUserData() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/user_data.json');
+      await file.writeAsString(json.encode(_userData));
+    } catch (e) {
+      // handle error
+    }
+  }
+
+  @override
+  void dispose() {
+    final currentPos = audioHandler.playbackState.value.position.inSeconds;
+    _userData[widget.audioUrl] = currentPos;
+    _saveUserData();
+    super.dispose();
   }
 
   @override
@@ -66,13 +142,14 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
           IconButton(
             icon: const Icon(Icons.list),
             onPressed: () {
-              // Implement function to show chapters list
+              // Exibir lista de capítulos
+              _showChaptersDialog();
             },
           ),
           IconButton(
             icon: const Icon(Icons.bookmark_add),
             onPressed: () {
-              // Implement function to add a bookmark
+              // Implementar função para adicionar um bookmark
             },
           ),
         ],
@@ -113,8 +190,9 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                     Slider(
                       min: 0.0,
                       max: totalDuration.inMilliseconds.toDouble(),
-                      value: position.inMilliseconds.toDouble().clamp(
-                          0.0, totalDuration.inMilliseconds.toDouble()),
+                      value: position.inMilliseconds
+                          .toDouble()
+                          .clamp(0.0, totalDuration.inMilliseconds.toDouble()),
                       onChanged: (value) {
                         audioHandler.seek(Duration(milliseconds: value.toInt()));
                       },
@@ -152,9 +230,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   icon: const Icon(Icons.replay_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition =
-                        audioHandler.playbackState.value.position -
-                            const Duration(seconds: 30);
+                    final newPosition = audioHandler.playbackState.value.position -
+                        const Duration(seconds: 30);
                     audioHandler.seek(
                       newPosition >= Duration.zero ? newPosition : Duration.zero,
                     );
@@ -192,9 +269,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   icon: const Icon(Icons.forward_30),
                   iconSize: 36.0,
                   onPressed: () {
-                    final newPosition =
-                        audioHandler.playbackState.value.position +
-                            const Duration(seconds: 30);
+                    final newPosition = audioHandler.playbackState.value.position +
+                        const Duration(seconds: 30);
                     final totalDuration =
                         audioHandler.mediaItem.value?.duration ?? Duration.zero;
                     audioHandler.seek(
@@ -224,23 +300,49 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     );
   }
 
+  // Exibe lista de capítulos
+  void _showChaptersDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Capítulos'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+            child: ListView.builder(
+              itemCount: _chapters.length,
+              itemBuilder: (context, index) {
+                final chapter = _chapters[index];
+                return ListTile(
+                  title: Text(chapter['title'] ?? 'Chapter'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    final startTime = chapter['start_time'] ?? 0;
+                    audioHandler.seek(Duration(seconds: startTime));
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget buildCoverArt(Uint8List? coverArtBytes) {
     if (coverArtBytes == null || coverArtBytes.isEmpty) {
       return const Icon(Icons.music_note, size: 360, color: Colors.white);
     }
     try {
       final bytes = coverArtBytes;
-
-      // Decode and resize the image
       img.Image? originalImage = img.decodeImage(bytes);
       if (originalImage == null) {
         print('Error decoding image');
         return const Icon(Icons.music_note, size: 360, color: Colors.white);
       }
-      img.Image resizedImage =
-          img.copyResize(originalImage, width: 350, height: 350);
+      img.Image resizedImage = img.copyResize(originalImage, width: 350, height: 350);
       final resizedBytes = Uint8List.fromList(img.encodeJpg(resizedImage));
-
       return Image.memory(
         resizedBytes,
         width: 360,
@@ -253,7 +355,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
   }
 
-  // Change Playback Speed
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final twoMin = twoDigits(duration.inMinutes.remainder(60));
+    final twoSec = twoDigits(duration.inSeconds.remainder(60));
+    return '${twoDigits(duration.inHours)}:$twoMin:$twoSec';
+  }
+
   void _changePlaybackSpeed(double? speed) {
     if (speed != null) {
       setState(() {
@@ -264,7 +372,6 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
   }
 
-  // Show Dialog to Select Playback Speed
   void _showPlaybackSpeedDialog() {
     showDialog<double>(
       context: context,
@@ -300,39 +407,19 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fechar'),
-            ),
-          ],
         );
       },
     );
   }
-
-  // Format Duration
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:'
-          '${minutes.toString().padLeft(2, '0')}:'
-          '${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes.toString().padLeft(2, '0')}:'
-          '${seconds.toString().padLeft(2, '0')}';
-    }
-  }
 }
 
+// Classe para gerenciar duração (auxiliar)
 class DurationState {
   final Duration position;
   final Duration bufferedPosition;
   final Duration total;
 
-  DurationState({
+  const DurationState({
     required this.position,
     required this.bufferedPosition,
     required this.total,
